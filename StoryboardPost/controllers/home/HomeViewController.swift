@@ -7,10 +7,25 @@
 
 import UIKit
 
-class HomeViewController: BaseViewController, UITableViewDelegate, UITableViewDataSource {
+
+protocol HomeRequestProtocol {
+    func apiPostList()
+    func apiPostDelete(post: Post)
+    
+    func navigateCreateScreen()
+    func navigateEditScreen(post: Post)
+}
+
+protocol HomeResponseProtocol {
+    func onPostList(posts: [Post])
+    func onPostDelete(isDeleted: Bool)
+}
+
+class HomeViewController: BaseViewController, UITableViewDelegate, UITableViewDataSource, HomeResponseProtocol {
     
     @IBOutlet weak var tableView: UITableView!
     var items = Array<Post>()
+    var presenter: HomeRequestProtocol!
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -24,36 +39,15 @@ class HomeViewController: BaseViewController, UITableViewDelegate, UITableViewDa
         self.tableView.reloadData()
     }
     
-    func apiPostList() {
-        showProgress()
-        
-        AFHttp.get(url: AFHttp.API_POST_LIST, params: AFHttp.paramsEmpty(), handler: { response in
-            self.hideProgress()
-            switch response.result {
-            case .success:
-                let posts = try! JSONDecoder().decode([Post].self, from: response.data!)
-                self.refreshTableView(posts: posts)
-            case let .failure(error):
-                print(error)
-            }
-        })
+    func onPostList(posts: [Post]) {
+        self.hideProgress()
+        self.refreshTableView(posts: posts)
     }
     
-    func apiPostDelete(post: Post) {
-        showProgress()
-        
-        AFHttp.del(url: AFHttp.API_POST_DELETE + post.id!, params: AFHttp.paramsEmpty(), handler: { response in
-            self.hideProgress()
-            switch response.result {
-            case .success:
-                print(response.result)
-                self.apiPostList()
-            case let .failure(error):
-                print(error)
-            }
-        })
+    func onPostDelete(isDeleted: Bool) {
+        self.hideProgress()
+        presenter.apiPostList()
     }
-    
     
     // MARK: - Method
     func initViews(){
@@ -61,7 +55,9 @@ class HomeViewController: BaseViewController, UITableViewDelegate, UITableViewDa
         tableView.delegate = self
         
         initNavigation()
-        apiPostList()
+        configureViper()
+        
+        presenter.apiPostList()
     }
     
     func initNavigation(){
@@ -70,7 +66,23 @@ class HomeViewController: BaseViewController, UITableViewDelegate, UITableViewDa
         
         navigationItem.leftBarButtonItem = UIBarButtonItem(image: refresh, style: .plain, target: self, action: #selector(leftTapped))
         navigationItem.rightBarButtonItem = UIBarButtonItem(image: add, style: .plain, target: self, action: #selector(rightTapped))
-        title = "Storyboard MVC"
+        title = "Storyboard VIPER"
+    }
+    
+    func configureViper(){
+        let manager = HttpManager()
+        let presenter = HomePresenter()
+        let interactor = HomeInteractor()
+        let routing = HomeRouting()
+        
+        presenter.controller = self
+        
+        self.presenter = presenter
+        presenter.interactor = interactor
+        presenter.routing = routing
+        routing.contoller = self
+        interactor.manager = manager
+        interactor.response = self
     }
     
     func callCreateViewController() {
@@ -88,7 +100,7 @@ class HomeViewController: BaseViewController, UITableViewDelegate, UITableViewDa
     // MARK: - Action
     
     @objc func leftTapped(){
-        apiPostList()
+        presenter.apiPostList()
     }
     
     @objc func rightTapped(){
@@ -126,7 +138,7 @@ class HomeViewController: BaseViewController, UITableViewDelegate, UITableViewDa
         return UIContextualAction(style: .destructive, title: "Delete") { (action, swipeButtonView, completion) in
             print("DELETE HERE")
             
-            self.apiPostDelete(post: post)
+            self.presenter.apiPostDelete(post: post)
             completion(true)
         }
     }
